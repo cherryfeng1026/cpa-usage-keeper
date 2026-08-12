@@ -685,6 +685,7 @@ func (s *usageService) ListUsageEvents(ctx context.Context, filter servicedto.Us
 		AuthIndex:    filter.AuthIndex,
 		APIGroupKey:  apiGroupKey,
 		Result:       filter.Result,
+		ClientIP:     filter.ClientIP,
 	}, s.pricing.NewResolver())
 	if err != nil {
 		return nil, err
@@ -727,6 +728,58 @@ func (s *usageService) ListUsageEvents(ctx context.Context, filter servicedto.Us
 	return &servicedto.UsageEventsPage{Events: result, TotalCount: page.TotalCount, Page: page.Page, PageSize: page.PageSize, TotalPages: page.TotalPages}, nil
 }
 
+// ListUsageClients 按客户端/IP 聚合所选时间窗口内的用量。
+func (s *usageService) ListUsageClients(ctx context.Context, filter servicedto.UsageFilter) (*servicedto.UsageClientsPage, error) {
+	ctx = usageServiceContext(ctx)
+	apiGroupKey, err := s.resolveAPIGroupKey(ctx, filter.APIKeyID)
+	if err != nil {
+		return nil, err
+	}
+	page, err := repository.ListUsageClientsWithFilter(s.db.WithContext(ctx), repodto.UsageQueryFilter{
+		Range:           filter.Range,
+		CustomUnit:      filter.CustomUnit,
+		StartTime:       filter.StartTime,
+		EndTime:         filter.EndTime,
+		EndExclusive:    filter.EndExclusive,
+		Limit:           filter.Limit,
+		Page:            filter.Page,
+		PageSize:        filter.PageSize,
+		APIGroupKey:     apiGroupKey,
+		ClientGroupBy:   filter.ClientGroupBy,
+		ClientSearch:    filter.ClientSearch,
+		ClientSortBy:    filter.ClientSortBy,
+		ClientSortOrder: filter.ClientSortOrder,
+	}, s.pricing.NewResolver())
+	if err != nil {
+		return nil, err
+	}
+	clients := make([]servicedto.UsageClientRecord, 0, len(page.Clients))
+	for _, row := range page.Clients {
+		clients = append(clients, servicedto.UsageClientRecord{
+			ClientIP:            row.ClientIP,
+			UserAgent:           row.UserAgent,
+			RequestCount:        row.RequestCount,
+			FailureCount:        row.FailureCount,
+			FailureRate:         row.FailureRate,
+			InputTokens:         row.InputTokens,
+			OutputTokens:        row.OutputTokens,
+			ReasoningTokens:     row.ReasoningTokens,
+			CacheReadTokens:     row.CacheReadTokens,
+			CacheCreationTokens: row.CacheCreationTokens,
+			TotalTokens:         row.TotalTokens,
+			CostUSD:             row.CostUSD,
+			CostAvailable:       row.CostAvailable,
+			FirstSeenAt:         row.FirstSeenAt,
+			LastSeenAt:          row.LastSeenAt,
+			PrimaryUserAgent:    row.PrimaryUserAgent,
+			UserAgentCount:      row.UserAgentCount,
+		})
+	}
+	return &servicedto.UsageClientsPage{
+		Clients: clients, TotalCount: page.TotalCount, Page: page.Page, PageSize: page.PageSize, TotalPages: page.TotalPages,
+	}, nil
+}
+
 // StreamUsageEvents 使用 Request Event Log 相同筛选条件逐行导出，不应用分页。
 func (s *usageService) StreamUsageEvents(ctx context.Context, filter servicedto.UsageFilter, emit func(servicedto.UsageEventRecord) error) error {
 	ctx = usageServiceContext(ctx)
@@ -744,6 +797,7 @@ func (s *usageService) StreamUsageEvents(ctx context.Context, filter servicedto.
 		AuthIndex:    filter.AuthIndex,
 		APIGroupKey:  apiGroupKey,
 		Result:       filter.Result,
+		ClientIP:     filter.ClientIP,
 	}, func(row repodto.UsageEventRecord) error {
 		return emit(servicedto.UsageEventRecord{
 			ID:                  row.ID,

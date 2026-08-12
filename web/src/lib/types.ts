@@ -282,6 +282,38 @@ export interface UsageEventsResponse {
   total_pages: number
 }
 
+export type UsageClientGroupBy = 'ip' | 'ip_user_agent'
+export type UsageClientSortBy = 'client_ip' | 'request_count' | 'failure_count' | 'failure_rate' | 'total_tokens' | 'cost_usd' | 'first_seen_at' | 'last_seen_at'
+export type UsageClientSortOrder = 'asc' | 'desc'
+
+export interface UsageClientRecord {
+  client_ip: string
+  user_agent?: string
+  request_count: number
+  failure_count: number
+  failure_rate: number
+  input_tokens: number
+  output_tokens: number
+  reasoning_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
+  total_tokens: number
+  cost_usd: number
+  cost_available: boolean
+  first_seen_at: string
+  last_seen_at: string
+  primary_user_agent: string
+  user_agent_count: number
+}
+
+export interface UsageClientsResponse {
+  clients: UsageClientRecord[]
+  total_count: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
 export interface UsageEventRequestLogSection {
   title: string
   content: string

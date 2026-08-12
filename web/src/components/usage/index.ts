@@ -7,6 +7,7 @@ export { SessionSettingsCard } from './SessionSettingsCard';
 export { PriceSettingsCard } from './PriceSettingsCard';
 export { AiProviderCredentialsSection, AuthFileCredentialsSection, CredentialProviderFilterBar, useCredentialsTabData } from './credentials';
 export { RequestEventsDetailsCard } from './RequestEventsDetailsCard';
+export { ClientUsageCard } from './ClientUsageCard';
 export { ServiceHealthCard } from './ServiceHealthCard';
 export { TokenActivityCard } from './TokenActivityCard';
 export { ActivityHeatmapGrid } from './ActivityHeatmapGrid';

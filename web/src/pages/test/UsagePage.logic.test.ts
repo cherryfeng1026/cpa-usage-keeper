@@ -752,6 +752,7 @@ describe('UsagePage tab labels', () => {
     expect(labels).toEqual([
       'translated:usage_stats.tab_overview',
       'translated:usage_stats.tab_analysis',
+      'translated:usage_stats.tab_clients',
       'translated:usage_stats.tab_ranking',
       'translated:usage_stats.tab_events',
       'translated:usage_stats.tab_auth_files',
@@ -763,7 +764,7 @@ describe('UsagePage tab labels', () => {
   it('omits Ranking from the CPAMC embedded navigation', () => {
     const values = getUsageTabOptions((key) => key, { includeRanking: false }).map((option) => option.value);
 
-    expect(values).toEqual(['overview', 'analysis', 'events', 'auth-files', 'ai-provider', 'settings']);
+    expect(values).toEqual(['overview', 'analysis', 'clients', 'events', 'auth-files', 'ai-provider', 'settings']);
   });
 });
 

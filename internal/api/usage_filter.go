@@ -21,6 +21,23 @@ var allowedUsageEventsPageSizes = map[int]struct{}{
 	1000: {},
 }
 
+var allowedUsageClientsPageSizes = map[int]struct{}{
+	20:  {},
+	50:  {},
+	100: {},
+}
+
+var allowedUsageClientSortFields = map[string]struct{}{
+	"client_ip":     {},
+	"request_count": {},
+	"failure_count": {},
+	"failure_rate":  {},
+	"total_tokens":  {},
+	"cost_usd":      {},
+	"first_seen_at": {},
+	"last_seen_at":  {},
+}
+
 const usageEventsCustomDayRangeMaxDays = 90
 
 func writeUsageFilterParseError(c *gin.Context, err error) {
@@ -155,8 +172,67 @@ func parseUsageFilterQuery(req *http.Request, anchor time.Time) (servicedto.Usag
 	filter.Source = strings.TrimSpace(query.Get("source"))
 	filter.AuthIndex = strings.TrimSpace(query.Get("auth_index"))
 	filter.Result = strings.TrimSpace(query.Get("result"))
+	filter.ClientIP = strings.TrimSpace(query.Get("client_ip"))
+	if len(filter.ClientIP) > 128 {
+		return servicedto.UsageFilter{}, fmt.Errorf("client_ip is too long")
+	}
 	if filter.Result != "" && filter.Result != "success" && filter.Result != "failed" {
 		return servicedto.UsageFilter{}, fmt.Errorf("invalid result %q", filter.Result)
+	}
+	return filter, nil
+}
+
+func parseUsageClientsFilterQuery(req *http.Request, anchor time.Time) (servicedto.UsageFilter, error) {
+	filter, err := parseUsageEventsTimeFilterQuery(req, anchor)
+	if err != nil {
+		return servicedto.UsageFilter{}, err
+	}
+	query := req.URL.Query()
+	filter.Page = 1
+	filter.PageSize = servicedto.DefaultUsageClientsLimit
+	filter.Limit = servicedto.DefaultUsageClientsLimit
+	if pageValue := strings.TrimSpace(query.Get("page")); pageValue != "" {
+		page, err := strconv.Atoi(pageValue)
+		if err != nil || page < 1 {
+			return servicedto.UsageFilter{}, fmt.Errorf("invalid page %q", pageValue)
+		}
+		filter.Page = page
+	}
+	if pageSizeValue := strings.TrimSpace(query.Get("page_size")); pageSizeValue != "" {
+		pageSize, err := strconv.Atoi(pageSizeValue)
+		if err != nil {
+			return servicedto.UsageFilter{}, fmt.Errorf("invalid page_size %q", pageSizeValue)
+		}
+		if _, ok := allowedUsageClientsPageSizes[pageSize]; !ok {
+			return servicedto.UsageFilter{}, fmt.Errorf("invalid page_size %q", pageSizeValue)
+		}
+		filter.PageSize = pageSize
+		filter.Limit = pageSize
+	}
+	filter.ClientGroupBy = strings.TrimSpace(query.Get("group_by"))
+	if filter.ClientGroupBy == "" {
+		filter.ClientGroupBy = "ip"
+	}
+	if filter.ClientGroupBy != "ip" && filter.ClientGroupBy != "ip_user_agent" {
+		return servicedto.UsageFilter{}, fmt.Errorf("invalid group_by %q", filter.ClientGroupBy)
+	}
+	filter.ClientSearch = strings.TrimSpace(query.Get("search"))
+	if len(filter.ClientSearch) > 128 {
+		return servicedto.UsageFilter{}, fmt.Errorf("search is too long")
+	}
+	filter.ClientSortBy = strings.TrimSpace(query.Get("sort_by"))
+	if filter.ClientSortBy == "" {
+		filter.ClientSortBy = "total_tokens"
+	}
+	if _, ok := allowedUsageClientSortFields[filter.ClientSortBy]; !ok {
+		return servicedto.UsageFilter{}, fmt.Errorf("invalid sort_by %q", filter.ClientSortBy)
+	}
+	filter.ClientSortOrder = strings.TrimSpace(query.Get("sort_order"))
+	if filter.ClientSortOrder == "" {
+		filter.ClientSortOrder = "desc"
+	}
+	if filter.ClientSortOrder != "asc" && filter.ClientSortOrder != "desc" {
+		return servicedto.UsageFilter{}, fmt.Errorf("invalid sort_order %q", filter.ClientSortOrder)
 	}
 	return filter, nil
 }

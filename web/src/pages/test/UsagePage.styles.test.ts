@@ -237,7 +237,7 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageSource).toContain('const activeCustomRange = useMemo(() => getUsageCustomRangeForTab(')
     expect(usagePageSource).toContain('const usageRangeQuery = useMemo(() => buildUsageRangeQuery({')
     expect(usagePageSource).toContain('customRange={activeCustomRange}')
-    expect(usagePageSource).toContain("maxCustomDayRangeDays={activeTab === 'events' ? REQUEST_EVENTS_CUSTOM_DAY_RANGE_MAX_DAYS : undefined}")
+    expect(usagePageSource).toContain("maxCustomDayRangeDays={activeTab === 'events' || activeTab === 'clients' ? REQUEST_EVENTS_CUSTOM_DAY_RANGE_MAX_DAYS : undefined}")
     expect(usagePageSource).toContain('onChange={handleTimeRangeChange}')
     expect(usagePageSource).toContain('fetchAnalysis(usageRangeQuery, controller.signal, selectedApiKeyId)')
     expect(usagePageSource).toContain('fetchAnalysisLatency(usageRangeQuery, controller.signal, selectedApiKeyId)')
@@ -792,12 +792,12 @@ describe('UsagePage toolbar styles', () => {
     expect(typesSource).not.toContain('latency_diagnostics: AnalysisLatencyDiagnostics')
   })
 
-  it('keeps Analysis before Ranking and Request Events', () => {
+  it('keeps Client usage between Analysis and Ranking', () => {
     expect(i18nSource).toContain("tab_analysis: 'Analysis'")
     expect(i18nSource).not.toContain("tab_analysis: 'API & Models'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 与模型'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 與模型'")
-    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const")
+    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'clients', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const")
   })
 
   it('keeps Sign out as the rightmost shared main action after Check Updates', () => {

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, createUsageEventRequestLogDownloadURL, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, isUsageRangeBoundsConflict, logout, revokeAuthSession, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
-import type { AnalysisLatencyDiagnostics, AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageCustomRange, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, UsageTimeRange, VersionResponse } from '@/lib/types';
+import { ApiError, createUsageEventRequestLogDownloadURL, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageClients, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, isUsageRangeBoundsConflict, logout, revokeAuthSession, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
+import type { AnalysisLatencyDiagnostics, AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageClientGroupBy, UsageClientRecord, UsageClientSortBy, UsageClientSortOrder, UsageCustomRange, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, UsageTimeRange, VersionResponse } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { Select } from '@/components/ui/Select';
@@ -17,6 +17,7 @@ import {
   RecentActivityPanel,
   OverviewRealtimePanel,
   AnalysisPanel,
+  ClientUsageCard,
   ApiKeySettingsCard,
   SessionSettingsCard,
   PriceSettingsCard,
@@ -64,7 +65,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; labelKey: string }> = [
   { value: 'dark', labelKey: 'usage_stats.theme_dark' },
   { value: 'auto', labelKey: 'usage_stats.theme_auto' }
 ];
-const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const;
+const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'clients', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const;
 const RANKING_PREVIEW_API = resolveRankingPreviewAPI(import.meta.env.VITE_RANKING_PREVIEW_MOCK);
 const LOCAL_RANKING_PREVIEW_API = resolveLocalRankingPreviewAPI(import.meta.env.VITE_RANKING_PREVIEW_MOCK);
 type UsageTab = (typeof USAGE_TAB_OPTIONS)[number];
@@ -72,6 +73,7 @@ type Translate = (key: string) => string;
 const USAGE_TAB_LABEL_KEYS: Record<UsageTab, string> = {
   overview: 'usage_stats.tab_overview',
   analysis: 'usage_stats.tab_analysis',
+  clients: 'usage_stats.tab_clients',
   ranking: 'usage_stats.tab_ranking',
   events: 'usage_stats.tab_events',
   'auth-files': 'usage_stats.tab_auth_files',
@@ -98,7 +100,7 @@ export const getUsageCustomRangeForTab = (
   { nowMs, timeZone }: { nowMs: number; timeZone?: string },
 ): UsageCustomRange | undefined => {
   const normalizedTimeZone = timeZone?.trim();
-  if (tab !== 'events' || !customRange || !normalizedTimeZone) return customRange;
+  if ((tab !== 'events' && tab !== 'clients') || !customRange || !normalizedTimeZone) return customRange;
   return clampCustomRangeToCurrentBounds(customRange, {
     nowMs,
     timeZone: normalizedTimeZone,
@@ -1079,6 +1081,19 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [analysisLatencyError, setAnalysisLatencyError] = useState('');
   const [analysisLatencyData, setAnalysisLatencyData] = useState<AnalysisLatencyDiagnostics | null>(null);
   const analysisRequestControllerRef = useRef<AbortController | null>(null);
+  const [clientsData, setClientsData] = useState<UsageClientRecord[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [clientsError, setClientsError] = useState('');
+  const [clientsPage, setClientsPage] = useState(1);
+  const [clientsPageSize, setClientsPageSize] = useState(50);
+  const [clientsTotalCount, setClientsTotalCount] = useState(0);
+  const [clientsTotalPages, setClientsTotalPages] = useState(0);
+  const [clientsGroupBy, setClientsGroupBy] = useState<UsageClientGroupBy>('ip');
+  const [clientsSearch, setClientsSearch] = useState('');
+  const [clientsSortBy, setClientsSortBy] = useState<UsageClientSortBy>('total_tokens');
+  const [clientsSortOrder, setClientsSortOrder] = useState<UsageClientSortOrder>('desc');
+  const [eventsClientIPFilter, setEventsClientIPFilter] = useState('');
+  const clientsRequestControllerRef = useRef<AbortController | null>(null);
 
   const tabOptions = useMemo(
     () => getUsageTabOptions(t, { includeRanking: !isEmbeddedInCPAMC }),
@@ -1374,6 +1389,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
   useEffect(() => {
     setEventsPage(1);
+    setClientsPage(1);
   }, [selectedApiKeyId, usageRangeQuery]);
 
   useEffect(() => {
@@ -1500,6 +1516,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
         source: eventsSourceFilter === ALL_REQUEST_EVENTS_FILTER ? undefined : eventsSourceFilter,
         result: eventsResultFilter === ALL_REQUEST_EVENTS_FILTER ? undefined : eventsResultFilter,
         apiKeyId: selectedApiKeyId,
+        clientIP: eventsClientIPFilter,
       });
       if (eventsRequestControllerRef.current !== controller) {
         return;
@@ -1532,7 +1549,62 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
         eventsRequestControllerRef.current = null;
       }
     }
-  }, [eventsModelFilter, eventsPage, eventsPageSize, eventsResultFilter, eventsSourceFilter, onAuthRequired, recoverRangeBoundsConflict, selectedApiKeyId, usageRangeQuery]);
+  }, [eventsClientIPFilter, eventsModelFilter, eventsPage, eventsPageSize, eventsResultFilter, eventsSourceFilter, onAuthRequired, recoverRangeBoundsConflict, selectedApiKeyId, usageRangeQuery]);
+
+  const loadClients = useCallback(async () => {
+    if (!usageRangeQuery.valid) return;
+    clientsRequestControllerRef.current?.abort();
+    const controller = new AbortController();
+    clientsRequestControllerRef.current = controller;
+    setClientsLoading(true);
+    setClientsError('');
+    try {
+      const response = await fetchUsageClients(usageRangeQuery, controller.signal, {
+        page: clientsPage,
+        pageSize: clientsPageSize,
+        groupBy: clientsGroupBy,
+        search: clientsSearch,
+        sortBy: clientsSortBy,
+        sortOrder: clientsSortOrder,
+        apiKeyId: selectedApiKeyId,
+      });
+      if (clientsRequestControllerRef.current !== controller) return;
+      if (response.total_pages > 0 && clientsPage > response.total_pages) {
+        setClientsPage(response.total_pages);
+        return;
+      }
+      setClientsData(response.clients ?? []);
+      setClientsTotalCount(response.total_count ?? 0);
+      setClientsTotalPages(response.total_pages ?? 0);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (clientsRequestControllerRef.current === controller) {
+        setClientsData([]);
+        setClientsTotalCount(0);
+        setClientsTotalPages(0);
+      }
+      if (recoverRangeBoundsConflict(error)) return;
+      if (error instanceof ApiError && error.status === 401) {
+        onAuthRequired?.();
+        return;
+      }
+      setClientsError(error instanceof Error ? error.message : 'Failed to load usage clients');
+    } finally {
+      if (clientsRequestControllerRef.current === controller) {
+        setClientsLoading(false);
+        clientsRequestControllerRef.current = null;
+      }
+    }
+  }, [clientsGroupBy, clientsPage, clientsPageSize, clientsSearch, clientsSortBy, clientsSortOrder, onAuthRequired, recoverRangeBoundsConflict, selectedApiKeyId, usageRangeQuery]);
+
+  const handleClientInspect = useCallback((clientIP: string) => {
+    setEventsClientIPFilter(clientIP);
+    setEventsModelFilter(ALL_REQUEST_EVENTS_FILTER);
+    setEventsSourceFilter(ALL_REQUEST_EVENTS_FILTER);
+    setEventsResultFilter(ALL_REQUEST_EVENTS_FILTER);
+    setEventsPage(1);
+    setActiveTab('events');
+  }, []);
 
   const resetEventsPage = useCallback(() => {
     setEventsPage(1);
@@ -1567,6 +1639,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
         source: eventsSourceFilter === ALL_REQUEST_EVENTS_FILTER ? undefined : eventsSourceFilter,
         result: eventsResultFilter === ALL_REQUEST_EVENTS_FILTER ? undefined : eventsResultFilter,
         apiKeyId: selectedApiKeyId,
+        clientIP: eventsClientIPFilter,
       });
       triggerBrowserFileDownload(file.blob, file.filename);
       showTopNotice('success', t('usage_stats.export_success'));
@@ -1584,7 +1657,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     } finally {
       setEventsExportingFormat(null);
     }
-  }, [eventsModelFilter, eventsResultFilter, eventsSourceFilter, onAuthRequired, recoverRangeBoundsConflict, selectedApiKeyId, showTopNotice, t, usageRangeQuery]);
+  }, [eventsClientIPFilter, eventsModelFilter, eventsResultFilter, eventsSourceFilter, onAuthRequired, recoverRangeBoundsConflict, selectedApiKeyId, showTopNotice, t, usageRangeQuery]);
 
   const handleRequestLogOpen = useCallback(async (event: UsageEvent) => {
     if (!requestLogAccessEnabled) return;
@@ -1652,6 +1725,10 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   }, [onAuthRequired, requestLogAccessEnabled, showTopNotice, t]);
 
   const refreshActiveTab = useCallback(async () => {
+    if (activeTab === 'clients') {
+      await loadClients();
+      return;
+    }
     if (activeTab === 'events') {
       await Promise.all([loadEventFilterOptions(), loadEvents()]);
       return;
@@ -1673,7 +1750,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
       return;
     }
     await Promise.all([loadUsage(), loadActivity(), loadRealtime()]);
-  }, [activeTab, credentialSectionVisibility.enabled, loadActivity, loadAnalysis, loadApiKeySettings, loadAuthSessions, loadEventFilterOptions, loadEvents, loadPricing, loadRealtime, loadUsage, refreshCredentials, refreshRanking]);
+  }, [activeTab, credentialSectionVisibility.enabled, loadActivity, loadAnalysis, loadApiKeySettings, loadAuthSessions, loadClients, loadEventFilterOptions, loadEvents, loadPricing, loadRealtime, loadUsage, refreshCredentials, refreshRanking]);
 
   const refreshAutoRefreshTab = useCallback(async () => {
     if (activeTab === 'events') {
@@ -1791,6 +1868,20 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
       eventsFilterOptionsRequestControllerRef.current = null;
     };
   }, [activeTab, loadEventFilterOptions]);
+
+  useEffect(() => {
+    if (activeTab !== 'clients') {
+      clientsRequestControllerRef.current?.abort();
+      clientsRequestControllerRef.current = null;
+      setClientsLoading(false);
+      return;
+    }
+    void loadClients();
+    return () => {
+      clientsRequestControllerRef.current?.abort();
+      clientsRequestControllerRef.current = null;
+    };
+  }, [activeTab, loadClients]);
 
   useEffect(() => {
     if (activeTab !== 'events') {
@@ -2064,7 +2155,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                       value={timeRange}
                       customRange={activeCustomRange}
                       timeZone={rangeTimeZone}
-                      maxCustomDayRangeDays={activeTab === 'events' ? REQUEST_EVENTS_CUSTOM_DAY_RANGE_MAX_DAYS : undefined}
+                      maxCustomDayRangeDays={activeTab === 'events' || activeTab === 'clients' ? REQUEST_EVENTS_CUSTOM_DAY_RANGE_MAX_DAYS : undefined}
                       onChange={handleTimeRangeChange}
                       ariaLabel={t('usage_stats.range_filter')}
                     />
@@ -2167,6 +2258,30 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
               </>
             )}
 
+            {activeTab === 'clients' && (
+              <>
+                {clientsError && <div className={styles.errorBox}>{clientsError}</div>}
+                <ClientUsageCard
+                  clients={clientsData}
+                  loading={clientsLoading}
+                  page={clientsPage}
+                  pageSize={clientsPageSize}
+                  totalCount={clientsTotalCount}
+                  totalPages={clientsTotalPages}
+                  groupBy={clientsGroupBy}
+                  search={clientsSearch}
+                  sortBy={clientsSortBy}
+                  sortOrder={clientsSortOrder}
+                  onPageChange={setClientsPage}
+                  onPageSizeChange={(pageSize) => { setClientsPageSize(pageSize); setClientsPage(1); }}
+                  onGroupByChange={(groupBy) => { setClientsGroupBy(groupBy); setClientsPage(1); }}
+                  onSearchChange={(search) => { setClientsSearch(search); setClientsPage(1); }}
+                  onSortChange={(sortBy, sortOrder) => { setClientsSortBy(sortBy); setClientsSortOrder(sortOrder); setClientsPage(1); }}
+                  onInspectClient={handleClientInspect}
+                />
+              </>
+            )}
+
             {activeTab === 'ranking' && (
               <RankingPage
                 key={rankingScope}
@@ -2202,6 +2317,14 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
             {activeTab === 'events' && (
               <>
                 {eventsError && <div className={styles.errorBox}>{eventsError}</div>}
+                {eventsClientIPFilter && (
+                  <div className={styles.requestEventsClientFilterNotice}>
+                    <span>{t('usage_stats.request_events_client_filter', { clientIP: eventsClientIPFilter })}</span>
+                    <Button type="button" variant="ghost" size="sm" appearance="action" onClick={() => { setEventsClientIPFilter(''); setEventsPage(1); }}>
+                      {t('usage_stats.clear_filters')}
+                    </Button>
+                  </div>
+                )}
                 <RequestEventsDetailsCard
                   events={eventsData}
                   loading={eventsLoading}

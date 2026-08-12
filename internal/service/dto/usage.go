@@ -34,6 +34,43 @@ type UsageFilter struct {
 	AuthIndex       string
 	APIKeyID        string
 	Result          string
+	ClientIP        string
+	ClientGroupBy   string
+	ClientSearch    string
+	ClientSortBy    string
+	ClientSortOrder string
+}
+
+const DefaultUsageClientsLimit = 50
+
+// UsageClientsPage 是客户端/IP 聚合列表的服务层分页结果。
+type UsageClientsPage struct {
+	Clients    []UsageClientRecord
+	TotalCount int64
+	Page       int
+	PageSize   int
+	TotalPages int
+}
+
+// UsageClientRecord 是一个客户端/IP 分组的用量摘要。
+type UsageClientRecord struct {
+	ClientIP            string
+	UserAgent           string
+	RequestCount        int64
+	FailureCount        int64
+	FailureRate         float64
+	InputTokens         int64
+	OutputTokens        int64
+	ReasoningTokens     int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+	TotalTokens         int64
+	CostUSD             float64
+	CostAvailable       bool
+	FirstSeenAt         time.Time
+	LastSeenAt          time.Time
+	PrimaryUserAgent    string
+	UserAgentCount      int64
 }
 
 // UsageEventsPage 是 usage events 列表的服务层结果。

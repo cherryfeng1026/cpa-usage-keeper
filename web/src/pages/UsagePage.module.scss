@@ -2849,6 +2849,21 @@
   }
 }
 
+.requestEventsClientFilterNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 30%, var(--border-color));
+  border-radius: $radius-lg;
+  background: color-mix(in srgb, var(--primary-color) 7%, var(--bg-primary));
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .requestEventsFiltersGroup {
   display: inline-flex;
   align-items: flex-end;

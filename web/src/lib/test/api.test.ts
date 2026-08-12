@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, appPath, createUsageEventRequestLogDownloadURL, deleteAuthFiles, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeys, fetchCpaApiKeySettings, fetchKeyActivity, fetchKeyOverview, fetchKeyOverviewRealtime, fetchQuotaAutoRefreshSettings, fetchUsageActivity, fetchUsageOverview, fetchUsageOverviewRealtime, fetchUsageQuotaCache, fetchUsageQuotaInspectionStatus, fetchUsageQuotaResetCredits, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchUsageIdentities, fetchUsageIdentitiesPage, fetchUsageQuotaRefreshTask, fetchVersion, loginWithCPAAPIKey, logout, refreshUsageQuotas, resetUsageQuota, revokeAuthSession, setAuthFilesDisabled, startUsageQuotaInspection, updateCpaApiKeyAlias, updateQuotaAutoRefreshSettings } from '../api';
+import { ApiError, appPath, createUsageEventRequestLogDownloadURL, deleteAuthFiles, exportUsageEvents, fetchAnalysis, fetchAnalysisLatency, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeys, fetchCpaApiKeySettings, fetchKeyActivity, fetchKeyOverview, fetchKeyOverviewRealtime, fetchQuotaAutoRefreshSettings, fetchUsageActivity, fetchUsageClients, fetchUsageOverview, fetchUsageOverviewRealtime, fetchUsageQuotaCache, fetchUsageQuotaInspectionStatus, fetchUsageQuotaResetCredits, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchUsageIdentities, fetchUsageIdentitiesPage, fetchUsageQuotaRefreshTask, fetchVersion, loginWithCPAAPIKey, logout, refreshUsageQuotas, resetUsageQuota, revokeAuthSession, setAuthFilesDisabled, startUsageQuotaInspection, updateCpaApiKeyAlias, updateQuotaAutoRefreshSettings } from '../api';
 
 const headerValue = (init: RequestInit | undefined, name: string): string | null => new Headers(init?.headers).get(name);
 
@@ -422,6 +422,40 @@ describe('fetchUsageEvents', () => {
     expect(parsed.searchParams.get('result')).toBe('failed');
     expect(parsed.searchParams.get('auth_index')).toBeNull();
     expect(init).toMatchObject({ credentials: 'include', signal });
+  });
+
+  it('passes client aggregation options and exact event IP filters', async () => {
+    vi.stubGlobal('window', { __APP_BASE_PATH__: undefined });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ clients: [], events: [], total_count: 0, page: 2, page_size: 20, total_pages: 0 }),
+    } as Response);
+    const signal = new AbortController().signal;
+
+    await fetchUsageClients({ range: '24h' }, signal, {
+      page: 2,
+      pageSize: 20,
+      groupBy: 'ip_user_agent',
+      search: '10.0.0',
+      sortBy: 'request_count',
+      sortOrder: 'asc',
+      apiKeyId: '42',
+    });
+    await fetchUsageEvents({ range: '24h' }, signal, { clientIP: 'unknown' });
+
+    const clientsURL = new URL(String(fetchMock.mock.calls[0][0]), 'http://localhost');
+    expect(clientsURL.pathname).toBe('/api/v1/usage/clients');
+    expect(clientsURL.searchParams.get('page')).toBe('2');
+    expect(clientsURL.searchParams.get('page_size')).toBe('20');
+    expect(clientsURL.searchParams.get('group_by')).toBe('ip_user_agent');
+    expect(clientsURL.searchParams.get('search')).toBe('10.0.0');
+    expect(clientsURL.searchParams.get('sort_by')).toBe('request_count');
+    expect(clientsURL.searchParams.get('sort_order')).toBe('asc');
+    expect(clientsURL.searchParams.get('api_key_id')).toBe('42');
+
+    const eventsURL = new URL(String(fetchMock.mock.calls[1][0]), 'http://localhost');
+    expect(eventsURL.pathname).toBe('/api/v1/usage/events');
+    expect(eventsURL.searchParams.get('client_ip')).toBe('unknown');
   });
 
   it('exports usage events with filters but without pagination params', async () => {

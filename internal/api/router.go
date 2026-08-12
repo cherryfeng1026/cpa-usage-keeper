@@ -126,6 +126,7 @@ func NewRouter(
 	registerUsageOverviewRoute(adminProtected, usageProvider, cpaAPIKeyProvider)
 	registerUsageActivityRoute(adminProtected, usageProvider)
 	registerUsageAnalysisRoute(adminProtected, usageProvider, cpaAPIKeyProvider)
+	registerUsageClientsRoute(adminProtected, usageProvider)
 	registerUsageEventsRoute(adminProtected, usageProvider, usageIdentityProvider, cpaAPIKeyProvider, requestLogProvider, requestLogDownloadTokens, statusConfig.CPARequestLogAccessEnabled)
 	registerUsageIdentityRoutes(adminProtected, usageIdentityProvider)
 	registerAuthFileManagementRoutes(adminProtected, authFilesProvider)

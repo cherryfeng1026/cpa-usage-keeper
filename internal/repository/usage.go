@@ -346,6 +346,13 @@ func applyUsageEventListQuery(query *gorm.DB, filter dto.UsageQueryFilter) *gorm
 		// Source 下拉在 API 层已转换成 auth_index，仓储层只保留真实查询维度。
 		query = query.Where("auth_index = ?", authIndex)
 	}
+	if clientIP := strings.TrimSpace(filter.ClientIP); clientIP != "" {
+		if clientIP == "unknown" {
+			query = query.Where("TRIM(COALESCE(client_ip, '')) IN ('', 'unknown')")
+		} else {
+			query = query.Where("TRIM(COALESCE(client_ip, '')) = ?", clientIP)
+		}
+	}
 	switch strings.TrimSpace(filter.Result) {
 	case "success":
 		query = query.Where("failed = ?", false)

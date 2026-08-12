@@ -1,4 +1,4 @@
-import { type AnalysisLatencyDiagnostics, type AnalysisResponse, type AuthFilesManagementResponse, type AuthManagedSessionsResponse, type AuthSessionResponse, type CpaApiKeyDisplayItem, type CpaApiKeyOptionsResponse, type CpaApiKeySettingsResponse, type CpaApiKeysResponse, type OverviewRealtimeBlock, type OverviewRealtimeWindow, type PricingEntry, type PricingResponse, type PricingRulesResponse, type PricingSyncPreviewResponse, type QuotaAutoRefreshSettings, type ReplacePricingRulesRequest, type StatusResponse, type UpdateCheckResponse, type UsageActivityRequest, type UsageActivityResponse, type UsageEventModelFilterOptionsResponse, type UsageEventRequestLogResponse, type UsageEventSourceFilterOptionsResponse, type UsageRangeRequest, type UsedModelsResponse, type UsageIdentitiesPageResponse, type UsageIdentitiesResponse, type UsageEventsResponse, type UsageIdentity, type UsageIdentityAuthType, type UsageOverviewResponse, type UsageQuotaCacheResponse, type UsageQuotaInspectionStatusResponse, type UsageQuotaRefreshResponse, type UsageQuotaRefreshTaskResponse, type UsageQuotaResetCreditsResponse, type UsageQuotaResetResponse, type VersionResponse } from './types'
+import { type AnalysisLatencyDiagnostics, type AnalysisResponse, type AuthFilesManagementResponse, type AuthManagedSessionsResponse, type AuthSessionResponse, type CpaApiKeyDisplayItem, type CpaApiKeyOptionsResponse, type CpaApiKeySettingsResponse, type CpaApiKeysResponse, type OverviewRealtimeBlock, type OverviewRealtimeWindow, type PricingEntry, type PricingResponse, type PricingRulesResponse, type PricingSyncPreviewResponse, type QuotaAutoRefreshSettings, type ReplacePricingRulesRequest, type StatusResponse, type UpdateCheckResponse, type UsageActivityRequest, type UsageActivityResponse, type UsageClientGroupBy, type UsageClientsResponse, type UsageClientSortBy, type UsageClientSortOrder, type UsageEventModelFilterOptionsResponse, type UsageEventRequestLogResponse, type UsageEventSourceFilterOptionsResponse, type UsageRangeRequest, type UsedModelsResponse, type UsageIdentitiesPageResponse, type UsageIdentitiesResponse, type UsageEventsResponse, type UsageIdentity, type UsageIdentityAuthType, type UsageOverviewResponse, type UsageQuotaCacheResponse, type UsageQuotaInspectionStatusResponse, type UsageQuotaRefreshResponse, type UsageQuotaRefreshTaskResponse, type UsageQuotaResetCreditsResponse, type UsageQuotaResetResponse, type VersionResponse } from './types'
 import { isCPAMCEmbed } from '@/embed/cpamcEmbed'
 import { resolveUsageRequestRange } from '@/utils/usage/rangeQuery'
 
@@ -412,6 +412,17 @@ export interface FetchUsageEventsOptions {
   source?: string
   result?: string
   apiKeyId?: string
+  clientIP?: string
+}
+
+export interface FetchUsageClientsOptions {
+  page?: number
+  pageSize?: number
+  groupBy?: UsageClientGroupBy
+  search?: string
+  sortBy?: UsageClientSortBy
+  sortOrder?: UsageClientSortOrder
+  apiKeyId?: string
 }
 
 export type UsageEventsExportFormat = 'csv' | 'json'
@@ -450,7 +461,34 @@ function buildUsageEventsParams(request: UsageRangeRequest, options?: FetchUsage
   if (selectedAPIKeyId) {
     params.set('api_key_id', selectedAPIKeyId)
   }
+  const clientIP = options?.clientIP?.trim()
+  if (clientIP) {
+    params.set('client_ip', clientIP)
+  }
   return params
+}
+
+export async function fetchUsageClients(request: UsageRangeRequest, signal?: AbortSignal, options?: FetchUsageClientsOptions): Promise<UsageClientsResponse> {
+  const params = buildUsageRangeParams(request)
+  if (typeof options?.page === 'number' && Number.isFinite(options.page) && options.page > 0) {
+    params.set('page', String(Math.floor(options.page)))
+  }
+  if (typeof options?.pageSize === 'number' && Number.isFinite(options.pageSize) && options.pageSize > 0) {
+    params.set('page_size', String(Math.floor(options.pageSize)))
+  }
+  if (options?.groupBy) params.set('group_by', options.groupBy)
+  const search = options?.search?.trim()
+  if (search) params.set('search', search)
+  if (options?.sortBy) params.set('sort_by', options.sortBy)
+  if (options?.sortOrder) params.set('sort_order', options.sortOrder)
+  const apiKeyId = options?.apiKeyId?.trim()
+  if (apiKeyId) params.set('api_key_id', apiKeyId)
+  const query = params.toString()
+  const response = await apiFetch(`${apiPath('/usage/clients')}${query ? `?${query}` : ''}`, { signal })
+  if (!response.ok) {
+    await parseApiError(response, `Failed to load usage clients: ${response.status}`)
+  }
+  return response.json()
 }
 
 function parseAttachmentFilename(contentDisposition: string | null, fallback: string): string {

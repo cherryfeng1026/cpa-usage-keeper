@@ -16,3 +16,8 @@ type UsageProvider interface {
 	GetAnalysis(context.Context, servicedto.UsageFilter) (*servicedto.AnalysisSnapshot, error)
 	GetAnalysisLatency(context.Context, servicedto.UsageFilter) (*servicedto.AnalysisLatencyDiagnostics, error)
 }
+
+// UsageClientProvider 是可选的客户端/IP 聚合能力，独立于既有 UsageProvider 以保持兼容。
+type UsageClientProvider interface {
+	ListUsageClients(context.Context, servicedto.UsageFilter) (*servicedto.UsageClientsPage, error)
+}
