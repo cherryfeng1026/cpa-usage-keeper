@@ -7,25 +7,47 @@ import (
 	"cpa-usage-keeper/internal/service"
 )
 
-func TestDecodeRedisUsageMessageKeepsClientMetadata(t *testing.T) {
+func TestDecodeRedisUsageMessageUsesFirstForwardedIPForClientAggregation(t *testing.T) {
 	event, _, err := service.DecodeRedisUsageMessage(`{
 		"request_id":"req-client-metadata",
-		"client_ip":"192.0.2.10",
-		"x_forwarded_for":"203.0.113.5, 198.51.100.8",
+		"client_ip":"172.18.0.4",
+		"x_forwarded_for":" 203.0.113.5, 198.51.100.8 ",
 		"user_agent":"test-client/1.0",
 		"tokens":{}
 	}`, time.Date(2026, 7, 29, 1, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("DecodeRedisUsageMessage returned error: %v", err)
 	}
-	if event.ClientIP == nil || *event.ClientIP != "192.0.2.10" {
-		t.Fatalf("expected client_ip to be preserved, got %#v", event.ClientIP)
+	if event.ClientIP == nil || *event.ClientIP != "203.0.113.5" {
+		t.Fatalf("expected first forwarded IP to become the effective client_ip, got %#v", event.ClientIP)
 	}
 	if event.XForwardedFor == nil || *event.XForwardedFor != "203.0.113.5, 198.51.100.8" {
 		t.Fatalf("expected x_forwarded_for to be preserved, got %#v", event.XForwardedFor)
 	}
 	if event.UserAgent == nil || *event.UserAgent != "test-client/1.0" {
 		t.Fatalf("expected user_agent to be preserved, got %#v", event.UserAgent)
+	}
+}
+
+func TestDecodeRedisUsageMessageFallsBackToDirectClientIPForInvalidForwardedChain(t *testing.T) {
+	event, _, err := service.DecodeRedisUsageMessage(`{
+		"request_id":"req-client-metadata-invalid-forwarded",
+		"client_ip":" 192.0.2.10 ",
+		"x_forwarded_for":"unknown, not-an-ip",
+		"user_agent":" test-client/1.0 ",
+		"tokens":{}
+	}`, time.Date(2026, 7, 29, 1, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("DecodeRedisUsageMessage returned error: %v", err)
+	}
+	if event.ClientIP == nil || *event.ClientIP != "192.0.2.10" {
+		t.Fatalf("expected direct client_ip fallback, got %#v", event.ClientIP)
+	}
+	if event.XForwardedFor == nil || *event.XForwardedFor != "unknown, not-an-ip" {
+		t.Fatalf("expected invalid forwarded chain to remain available for auditing, got %#v", event.XForwardedFor)
+	}
+	if event.UserAgent == nil || *event.UserAgent != "test-client/1.0" {
+		t.Fatalf("expected trimmed user_agent, got %#v", event.UserAgent)
 	}
 }
 

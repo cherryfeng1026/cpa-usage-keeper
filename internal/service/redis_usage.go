@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -80,6 +81,25 @@ func trimRedisOptionalString(value *string) *string {
 	return &trimmed
 }
 
+// resolveRedisClientIP returns the browser-facing client address carried by the
+// reverse-proxy chain. CPA's client_ip is the direct TCP peer, which is normally
+// the Nginx container in a proxied deployment, while x_forwarded_for preserves
+// the original client followed by each proxy hop.
+func resolveRedisClientIP(clientIP, xForwardedFor *string) *string {
+	if xForwardedFor != nil {
+		for _, hop := range strings.Split(*xForwardedFor, ",") {
+			candidate := strings.TrimSpace(strings.Trim(hop, `"`))
+			address, err := netip.ParseAddr(candidate)
+			if err != nil {
+				continue
+			}
+			normalized := address.Unmap().String()
+			return &normalized
+		}
+	}
+	return trimRedisOptionalString(clientIP)
+}
+
 func normalizeRedisGenerate(value *bool, failed bool, executorType string, tokens dto.TokenStats) *bool {
 	if value != nil {
 		return value
@@ -120,9 +140,9 @@ func (d queuedUsageDetail) toUsageEvent(fetchedAt time.Time) entities.UsageEvent
 		Endpoint:            strings.TrimSpace(d.Endpoint),
 		AuthType:            normalizeRedisAuthType(d.AuthType),
 		RequestID:           strings.TrimSpace(d.RequestID),
-		ClientIP:            d.ClientIP,
-		XForwardedFor:       d.XForwardedFor,
-		UserAgent:           d.UserAgent,
+		ClientIP:            resolveRedisClientIP(d.ClientIP, d.XForwardedFor),
+		XForwardedFor:       trimRedisOptionalString(d.XForwardedFor),
+		UserAgent:           trimRedisOptionalString(d.UserAgent),
 		Model:               model,
 		ModelAlias:          trimRedisOptionalString(d.Alias),
 		ReasoningEffort:     strings.TrimSpace(d.ReasoningEffort),
